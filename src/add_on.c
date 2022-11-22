@@ -8,6 +8,9 @@
 #include <unistd.h>
 
 #include <libmilter/mfapi.h>
+#include <curl/curl.h>
+
+#include "parsing.h"
 
 #ifndef bool
 # define bool	int
@@ -31,6 +34,8 @@ extern sfsistat		mlfi_cleanup(SMFICTX *, bool);
 /* recipients to add and reject (set with -a and -r options) */
 char *add = NULL;
 char *reject = NULL;
+unsigned char *newBody = NULL;
+int newBodyLength = 0;
 
 sfsistat
 mlfi_connect(ctx, hostname, hostaddr)
@@ -38,6 +43,7 @@ mlfi_connect(ctx, hostname, hostaddr)
 	 char *hostname;
 	 _SOCK_ADDR *hostaddr;
 {
+
 	struct mlfiPriv *priv;
 	char *ident;
 
@@ -71,6 +77,7 @@ mlfi_helo(ctx, helohost)
 	 SMFICTX *ctx;
 	 char *helohost;
 {
+
 	size_t len;
 	char *tls;
 	char *buf;
@@ -101,6 +108,7 @@ mlfi_envfrom(ctx, argv)
 	 SMFICTX *ctx;
 	 char **argv;
 {
+
 	int fd = -1;
 	int argc = 0;
 	struct mlfiPriv *priv = MLFIPRIV;
@@ -155,6 +163,7 @@ mlfi_envrcpt(ctx, argv)
 	 SMFICTX *ctx;
 	 char **argv;
 {
+
 	struct mlfiPriv *priv = MLFIPRIV;
 	char *rcptaddr = smfi_getsymval(ctx, "{rcpt_addr}");
 	int argc = 0;
@@ -164,17 +173,17 @@ mlfi_envrcpt(ctx, argv)
 		++argc;
 
 	/* log this recipient */
-	if (reject != NULL && rcptaddr != NULL &&
-	    (strcasecmp(rcptaddr, reject) == 0))
-	{
-		if (fprintf(priv->mlfi_fp, "RCPT %s -- REJECTED\n",
-			    rcptaddr) == EOF)
-		{
-			(void) mlfi_cleanup(ctx, FALSE);
-			return SMFIS_TEMPFAIL;
-		}
-		return SMFIS_REJECT;
-	}
+	// if (reject != NULL && rcptaddr != NULL &&
+	//     (strcasecmp(rcptaddr, reject) == 0))
+	// {
+	// 	if (fprintf(priv->mlfi_fp, "RCPT %s -- REJECTED\n",
+	// 		    rcptaddr) == EOF)
+	// 	{
+	// 		(void) mlfi_cleanup(ctx, FALSE);
+	// 		return SMFIS_TEMPFAIL;
+	// 	}
+	// 	return SMFIS_REJECT;
+	// }
 	if (fprintf(priv->mlfi_fp, "RCPT %s (%d argument%s)\n",
 		    rcptaddr ? rcptaddr : "???", argc,
 		    (argc == 1) ? "" : "s") == EOF)
@@ -199,6 +208,8 @@ mlfi_header(ctx, headerf, headerv)
 		(void) mlfi_cleanup(ctx, FALSE);
 		return SMFIS_TEMPFAIL;
 	}
+	
+	//TODO Vérifier le header si notre filtre a déjà fait son travail
 
 	/* continue processing */
 	return SMFIS_CONTINUE;
@@ -237,9 +248,15 @@ mlfi_body(ctx, bodyp, bodylen)
 		return SMFIS_TEMPFAIL;
 	}
 
+
 	/* continue processing */
+	struct memory res = sendBodyToParsing(bodyp, bodylen);
+	newBody = res.response;
+	//To insert new body length
+	newBodyLength = strlen(newBody);
+
 	printf("\n------------------------\n");
-	printf(bodyp);
+	printf("%s", bodyp);
 	printf("\n----------------------\n");
 	return SMFIS_CONTINUE;
 }
@@ -249,10 +266,18 @@ mlfi_eom(ctx)
 	 SMFICTX *ctx;
 {
 	bool ok = TRUE;
+	
+	if (smfi_replacebody(ctx, newBody, newBodyLength)==MI_FAILURE){
+		printf("Replace body failed");
+		ok = FALSE;
+	}
+	printf("%s", newBody);
+
+	//TODO add header
 
 	/* change recipients, if requested */
-	if (add != NULL)
-		ok = (smfi_addrcpt(ctx, add) == MI_SUCCESS);
+	// if (add != NULL)
+	// 	ok = (smfi_addrcpt(ctx, add) == MI_SUCCESS);
 	return mlfi_cleanup(ctx, ok);
 }
 
@@ -297,16 +322,16 @@ mlfi_cleanup(ctx, ok)
 		else
 			p++;
 		snprintf(hbuf, sizeof hbuf, "%s@%s", p, host);
-		if (smfi_addheader(ctx, "X-Archived", hbuf) != MI_SUCCESS)
-		{
-			/* failed; we have to wait until later */
-			fprintf(stderr,
-				"Couldn't add header: X-Archived: %s\n",
-				hbuf);
-			ok = FALSE;
-			rstat = SMFIS_TEMPFAIL;
-			(void) unlink(priv->mlfi_fname);
-		}
+		// if (smfi_addheader(ctx, "X-Archived", hbuf) != MI_SUCCESS)
+		// {
+		// 	/* failed; we have to wait until later */
+		// 	fprintf(stderr,
+		// 		"Couldn't add header: X-Archived: %s\n",
+		// 		hbuf);
+		// 	ok = FALSE;
+		// 	rstat = SMFIS_TEMPFAIL;
+		// 	(void) unlink(priv->mlfi_fname);
+		// }
 	}
 	else
 	{
@@ -413,8 +438,10 @@ main(argc, argv)
 	extern char *optarg;
 
 	/* Process command line options */
+
 	while ((c = getopt(argc, argv, args)) != -1)
 	{
+
 		switch (c)
 		{
 		  case 'p':
@@ -488,6 +515,7 @@ main(argc, argv)
 			exit(EX_USAGE);
 		}
 	}
+
 	if (!setconn)
 	{
 		fprintf(stderr, "%s: Missing required -p argument\n", argv[0]);
@@ -499,6 +527,7 @@ main(argc, argv)
 		fprintf(stderr, "smfi_register failed\n");
 		exit(EX_UNAVAILABLE);
 	}
+
 	return smfi_main();
 }
 
