@@ -172,18 +172,6 @@ mlfi_envrcpt(ctx, argv)
 	while (*argv++ != NULL)
 		++argc;
 
-	/* log this recipient */
-	// if (reject != NULL && rcptaddr != NULL &&
-	//     (strcasecmp(rcptaddr, reject) == 0))
-	// {
-	// 	if (fprintf(priv->mlfi_fp, "RCPT %s -- REJECTED\n",
-	// 		    rcptaddr) == EOF)
-	// 	{
-	// 		(void) mlfi_cleanup(ctx, FALSE);
-	// 		return SMFIS_TEMPFAIL;
-	// 	}
-	// 	return SMFIS_REJECT;
-	// }
 	if (fprintf(priv->mlfi_fp, "RCPT %s (%d argument%s)\n",
 		    rcptaddr ? rcptaddr : "???", argc,
 		    (argc == 1) ? "" : "s") == EOF)
@@ -250,14 +238,17 @@ mlfi_body(ctx, bodyp, bodylen)
 
 
 	/* continue processing */
+	// Get the new body
 	struct memory res = sendBodyToParsing(bodyp, bodylen);
 	newBody = res.response;
 	//To insert new body length
 	newBodyLength = strlen(newBody);
 
-	printf("\n------------------------\n");
-	printf("%s", bodyp);
-	printf("\n----------------------\n");
+	//DEBUG only
+	fprintf(stderr, "\n------------------------\n");
+	fprintf(stderr, "%s", bodyp);
+	fprintf(stderr, "\n----------------------\n");
+	//---
 	return SMFIS_CONTINUE;
 }
 
@@ -266,18 +257,14 @@ mlfi_eom(ctx)
 	 SMFICTX *ctx;
 {
 	bool ok = TRUE;
-	
 	if (smfi_replacebody(ctx, newBody, newBodyLength)==MI_FAILURE){
-		printf("Replace body failed");
+		fprintf(stderr, "Replace body failed");
 		ok = FALSE;
 	}
-	printf("%s", newBody);
+	fprintf(stderr, "%s", newBody);
 
 	//TODO add header
 
-	/* change recipients, if requested */
-	// if (add != NULL)
-	// 	ok = (smfi_addrcpt(ctx, add) == MI_SUCCESS);
 	return mlfi_cleanup(ctx, ok);
 }
 
@@ -322,16 +309,6 @@ mlfi_cleanup(ctx, ok)
 		else
 			p++;
 		snprintf(hbuf, sizeof hbuf, "%s@%s", p, host);
-		// if (smfi_addheader(ctx, "X-Archived", hbuf) != MI_SUCCESS)
-		// {
-		// 	/* failed; we have to wait until later */
-		// 	fprintf(stderr,
-		// 		"Couldn't add header: X-Archived: %s\n",
-		// 		hbuf);
-		// 	ok = FALSE;
-		// 	rstat = SMFIS_TEMPFAIL;
-		// 	(void) unlink(priv->mlfi_fname);
-		// }
 	}
 	else
 	{
@@ -399,7 +376,7 @@ mlfi_negotiate(ctx, f0, f1, f2, f3, pf0, pf1, pf2, pf3)
 
 struct smfiDesc smfilter =
 {
-	"SampleFilter",	/* filter name */
+	"AttachmentServerFilter",	/* filter name */
 	SMFI_VERSION,	/* version code -- do not change */
 	SMFIF_ADDHDRS|SMFIF_ADDRCPT,
 			/* flags */
@@ -530,5 +507,3 @@ main(argc, argv)
 
 	return smfi_main();
 }
-
-/* eof */

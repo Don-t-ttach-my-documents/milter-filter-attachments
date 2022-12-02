@@ -23,7 +23,7 @@ static size_t cb(void *data, size_t size, size_t nmemb, void *userp)
   mem->size += realsize;
   mem->response[mem->size] = 0;
 
-  printf("Size is %ld\nnmemb is %ld\n", size, nmemb);
+  //fprintf(stderr, "Size is %ld\nnmemb is %ld\n", size, nmemb);
 
   return realsize;
 }
@@ -86,7 +86,7 @@ struct memory sendBodyToParsing(char *body, size_t lenBody)
     curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
 
     /* we want to collect the result of the parsing */
-    struct memory chunk = {0};
+    struct memory chunk;
     /* send all data to this function  */
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, cb);
 
