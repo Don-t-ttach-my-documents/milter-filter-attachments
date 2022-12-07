@@ -25,6 +25,8 @@ struct mlfiPriv
 	char	*mlfi_connectfrom;
 	char	*mlfi_helofrom;
 	FILE	*mlfi_fp;
+	unsigned char *newBody;
+	int newBodyLength;
 };
 
 #define MLFIPRIV	((struct mlfiPriv *) smfi_getpriv(ctx))
@@ -34,8 +36,6 @@ extern sfsistat		mlfi_cleanup(SMFICTX *, bool);
 /* recipients to add and reject (set with -a and -r options) */
 char *add = NULL;
 char *reject = NULL;
-unsigned char *newBody = NULL;
-int newBodyLength = 0;
 
 sfsistat
 mlfi_connect(ctx, hostname, hostaddr)
@@ -58,7 +58,7 @@ mlfi_connect(ctx, hostname, hostaddr)
 
 	/* save the private data */
 	smfi_setpriv(ctx, priv);
-
+	//priv->newBody = NULL;
 	ident = smfi_getsymval(ctx, "_");
 	if (ident == NULL)
 		ident = "???";
@@ -172,18 +172,6 @@ mlfi_envrcpt(ctx, argv)
 	while (*argv++ != NULL)
 		++argc;
 
-	/* log this recipient */
-	// if (reject != NULL && rcptaddr != NULL &&
-	//     (strcasecmp(rcptaddr, reject) == 0))
-	// {
-	// 	if (fprintf(priv->mlfi_fp, "RCPT %s -- REJECTED\n",
-	// 		    rcptaddr) == EOF)
-	// 	{
-	// 		(void) mlfi_cleanup(ctx, FALSE);
-	// 		return SMFIS_TEMPFAIL;
-	// 	}
-	// 	return SMFIS_REJECT;
-	// }
 	if (fprintf(priv->mlfi_fp, "RCPT %s (%d argument%s)\n",
 		    rcptaddr ? rcptaddr : "???", argc,
 		    (argc == 1) ? "" : "s") == EOF)
@@ -250,14 +238,17 @@ mlfi_body(ctx, bodyp, bodylen)
 
 
 	/* continue processing */
-	struct memory res = sendBodyToParsing(bodyp, bodylen);
-	newBody = res.response;
+	// Get the new body
+	struct MemoryStruct res = sendBodyToParsing(bodyp, bodylen);
+	priv->newBody = res.memory;
 	//To insert new body length
-	newBodyLength = strlen(newBody);
+	priv->newBodyLength = strlen(priv->newBody);
 
-	printf("\n------------------------\n");
-	printf("%s", bodyp);
-	printf("\n----------------------\n");
+	//------DEBUG only
+	// fprintf(stderr, "\n------------------------\n");
+	// fprintf(stderr, "%s", bodyp);
+	// fprintf(stderr, "\n----------------------\n");
+	//----------------
 	return SMFIS_CONTINUE;
 }
 
@@ -266,18 +257,17 @@ mlfi_eom(ctx)
 	 SMFICTX *ctx;
 {
 	bool ok = TRUE;
-	
-	if (smfi_replacebody(ctx, newBody, newBodyLength)==MI_FAILURE){
-		printf("Replace body failed");
+	struct mlfiPriv *priv = MLFIPRIV;
+	fprintf(stderr, "%s", priv->newBody);
+	if (smfi_replacebody(ctx, priv->newBody, priv->newBodyLength)==MI_FAILURE){
+		fprintf(stderr, "Replace body failed");
 		ok = FALSE;
 	}
-	printf("%s", newBody);
+	else 
+		fprintf(stderr, "Replace body succeed");
 
 	//TODO add header
 
-	/* change recipients, if requested */
-	// if (add != NULL)
-	// 	ok = (smfi_addrcpt(ctx, add) == MI_SUCCESS);
 	return mlfi_cleanup(ctx, ok);
 }
 
@@ -322,16 +312,6 @@ mlfi_cleanup(ctx, ok)
 		else
 			p++;
 		snprintf(hbuf, sizeof hbuf, "%s@%s", p, host);
-		// if (smfi_addheader(ctx, "X-Archived", hbuf) != MI_SUCCESS)
-		// {
-		// 	/* failed; we have to wait until later */
-		// 	fprintf(stderr,
-		// 		"Couldn't add header: X-Archived: %s\n",
-		// 		hbuf);
-		// 	ok = FALSE;
-		// 	rstat = SMFIS_TEMPFAIL;
-		// 	(void) unlink(priv->mlfi_fname);
-		// }
 	}
 	else
 	{
@@ -345,7 +325,8 @@ mlfi_cleanup(ctx, ok)
 	/* release private memory */
 	if (priv->mlfi_fname != NULL)
 		free(priv->mlfi_fname);
-
+	if (priv->newBody != NULL)
+		free(priv->newBody);
 	/* return status */
 	return rstat;
 }
@@ -399,7 +380,7 @@ mlfi_negotiate(ctx, f0, f1, f2, f3, pf0, pf1, pf2, pf3)
 
 struct smfiDesc smfilter =
 {
-	"SampleFilter",	/* filter name */
+	"AttachmentServerFilter",	/* filter name */
 	SMFI_VERSION,	/* version code -- do not change */
 	SMFIF_ADDHDRS|SMFIF_ADDRCPT,
 			/* flags */
@@ -530,5 +511,3 @@ main(argc, argv)
 
 	return smfi_main();
 }
-
-/* eof */

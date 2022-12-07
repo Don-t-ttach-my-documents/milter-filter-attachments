@@ -1,9 +1,3 @@
-Content-Type: multipart/mixed; boundary="===============1860231120576597388=="
-MIME-Version: 1.0
-Subject: Greetings
-From: xyz@gmail.com
-To: abc@gmail.com
-
 --===============1860231120576597388==
 Content-Type: text/plain; charset="us-ascii"
 MIME-Version: 1.0
@@ -654,4 +648,3 @@ QzE3NkQ1NDY5REMxPjxDNDQ0NEY0RUM4RkFGMzRGQTFFOUMxNzZENTQ2OURDMT5dIC9QcmV2IDM1
 MjQ2L1hSZWZTdG0gMzQ5MzQ+Pg0Kc3RhcnR4cmVmDQozNjAwMw0KJSVFT0Y=
 
 --===============1860231120576597388==--
-.
