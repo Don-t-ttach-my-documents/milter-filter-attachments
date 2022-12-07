@@ -3,32 +3,35 @@
 #include <curl/curl.h>
 #include <string.h>
 
-static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream)
+//TO DEBUG
+static size_t write_data_in_file(void *ptr, size_t size, size_t nmemb, void *stream)
 {
-  size_t written = fwrite(ptr, size, nmemb, (FILE *)stream);
+  size_t written = fprintf((FILE *)stream, ptr, size, nmemb);
   return written;
 }
 
-static size_t cb(void *data, size_t size, size_t nmemb, void *userp)
+static size_t receive_data(void *data, size_t size, size_t nmemb, void *userp)
 {
   size_t realsize = size * nmemb;
-  struct memory *mem = (struct memory *)userp;
+  struct MemoryStruct *mem = (struct MemoryStruct *)userp;
 
-  char *ptr = realloc(mem->response, mem->size + realsize + 1);
-  if (ptr == NULL)
-    return 0; /* out of memory! */
+  char *ptr = realloc(mem->memory, mem->size + realsize + 1);
+  if(!ptr) {
+    /* out of memory! */
+    printf("not enough memory (realloc returned NULL)\n");
+    return 0;
+  }
 
-  mem->response = ptr;
-  memcpy(&(mem->response[mem->size]), data, realsize);
+  mem->memory = ptr;
+  memcpy(&(mem->memory[mem->size]), data, realsize);
   mem->size += realsize;
-  mem->response[mem->size] = 0;
-
-  //fprintf(stderr, "Size is %ld\nnmemb is %ld\n", size, nmemb);
+  mem->memory[mem->size] = '.';
 
   return realsize;
 }
 
-static size_t read_callback(char *dest, size_t size, size_t nmemb, void *userp)
+//Envoie plusieurs requêtes en cas de pièce jointe trop lourdes
+static size_t send_data_callback(char *dest, size_t size, size_t nmemb, void *userp)
 {
   struct WriteThis *wt = (struct WriteThis *)userp;
   size_t buffer_size = size * nmemb;
@@ -49,7 +52,7 @@ static size_t read_callback(char *dest, size_t size, size_t nmemb, void *userp)
   return 0; /* no more data left to deliver */
 }
 
-struct memory sendBodyToParsing(char *body, size_t lenBody)
+struct MemoryStruct sendBodyToParsing(char *body, size_t lenBody)
 {
   static const char *url = "http://localhost:3201/upload";
 
@@ -68,7 +71,7 @@ struct memory sendBodyToParsing(char *body, size_t lenBody)
   {
     fprintf(stderr, "curl_global_init() failed: %s\n",
             curl_easy_strerror(res));
-    struct memory retour = {"Error", 5};
+    struct MemoryStruct retour = {"Error", 5};
     return retour;
   }
 
@@ -83,26 +86,26 @@ struct memory sendBodyToParsing(char *body, size_t lenBody)
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
 
     /* we want to use our own read function */
-    curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
-
-    /* we want to collect the result of the parsing */
-    struct memory chunk;
-    /* send all data to this function  */
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, cb);
-
-    /* we pass our 'chunk' struct to the callback function */
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
-
-    /* pointer to pass to our read function */
+    curl_easy_setopt(curl, CURLOPT_READFUNCTION, send_data_callback);
+    
+    /* pointer to pass to our read/send function */
     curl_easy_setopt(curl, CURLOPT_READDATA, &wt);
-
-    /* get verbose debug output please */
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
     /* Set the expected POST size. If you want to POST large amounts of data,
        consider CURLOPT_POSTFIELDSIZE_LARGE */
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)wt.sizeleft);
 
+    /* we want to collect the result of the parsing */
+    struct MemoryStruct chunk = {malloc(1), 0};
+    //FILE* inputFile = fopen("retour.txt", "w");
+    /* send all data to this function  */
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receive_data);
+
+    /* we pass our 'chunk' struct to the callback function */
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+
+    /* get verbose debug output please */
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
     /* Perform the request, res will get the return code */
     res = curl_easy_perform(curl);
@@ -112,11 +115,12 @@ struct memory sendBodyToParsing(char *body, size_t lenBody)
               curl_easy_strerror(res));
 
     /* always cleanup */
+    // fclose(inputFile);
     curl_easy_cleanup(curl);
     curl_global_cleanup();
     return chunk;
   }
   curl_global_cleanup();
-  struct memory retour = {"erreur", 5};
+  struct MemoryStruct retour = {"erreur", 5};
   return retour;
 }

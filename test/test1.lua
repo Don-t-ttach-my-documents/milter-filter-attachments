@@ -71,13 +71,13 @@
             error "mt.eoh() unexpected reply"
        end
 
-       -- send body
+       --send body
       --  if mt.bodystring(conn, "This is a test!\nA pretty test!\n") ~= nil then
       --          mt.echo("mt.bodystring() failed")
       --       error "mt.bodystring() failed"
       --  end
 
-       if mt.bodyfile(conn, "mime_body.txt") ~= nil then
+       if mt.bodyfile(conn, "postfix_message_raw.txt") ~= nil then
          mt.echo("mt.bodyfile() failed")
          error "mt.bodyfile() failed"
        end

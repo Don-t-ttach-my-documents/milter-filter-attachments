@@ -25,6 +25,8 @@ struct mlfiPriv
 	char	*mlfi_connectfrom;
 	char	*mlfi_helofrom;
 	FILE	*mlfi_fp;
+	unsigned char *newBody;
+	int newBodyLength;
 };
 
 #define MLFIPRIV	((struct mlfiPriv *) smfi_getpriv(ctx))
@@ -34,8 +36,6 @@ extern sfsistat		mlfi_cleanup(SMFICTX *, bool);
 /* recipients to add and reject (set with -a and -r options) */
 char *add = NULL;
 char *reject = NULL;
-unsigned char *newBody = NULL;
-int newBodyLength = 0;
 
 sfsistat
 mlfi_connect(ctx, hostname, hostaddr)
@@ -58,7 +58,7 @@ mlfi_connect(ctx, hostname, hostaddr)
 
 	/* save the private data */
 	smfi_setpriv(ctx, priv);
-
+	//priv->newBody = NULL;
 	ident = smfi_getsymval(ctx, "_");
 	if (ident == NULL)
 		ident = "???";
@@ -239,16 +239,16 @@ mlfi_body(ctx, bodyp, bodylen)
 
 	/* continue processing */
 	// Get the new body
-	struct memory res = sendBodyToParsing(bodyp, bodylen);
-	newBody = res.response;
+	struct MemoryStruct res = sendBodyToParsing(bodyp, bodylen);
+	priv->newBody = res.memory;
 	//To insert new body length
-	newBodyLength = strlen(newBody);
+	priv->newBodyLength = strlen(priv->newBody);
 
-	//DEBUG only
-	fprintf(stderr, "\n------------------------\n");
-	fprintf(stderr, "%s", bodyp);
-	fprintf(stderr, "\n----------------------\n");
-	//---
+	//------DEBUG only
+	// fprintf(stderr, "\n------------------------\n");
+	// fprintf(stderr, "%s", bodyp);
+	// fprintf(stderr, "\n----------------------\n");
+	//----------------
 	return SMFIS_CONTINUE;
 }
 
@@ -257,11 +257,14 @@ mlfi_eom(ctx)
 	 SMFICTX *ctx;
 {
 	bool ok = TRUE;
-	if (smfi_replacebody(ctx, newBody, newBodyLength)==MI_FAILURE){
+	struct mlfiPriv *priv = MLFIPRIV;
+	fprintf(stderr, "%s", priv->newBody);
+	if (smfi_replacebody(ctx, priv->newBody, priv->newBodyLength)==MI_FAILURE){
 		fprintf(stderr, "Replace body failed");
 		ok = FALSE;
 	}
-	fprintf(stderr, "%s", newBody);
+	else 
+		fprintf(stderr, "Replace body succeed");
 
 	//TODO add header
 
@@ -322,7 +325,8 @@ mlfi_cleanup(ctx, ok)
 	/* release private memory */
 	if (priv->mlfi_fname != NULL)
 		free(priv->mlfi_fname);
-
+	if (priv->newBody != NULL)
+		free(priv->newBody);
 	/* return status */
 	return rstat;
 }
